@@ -3,11 +3,11 @@ package com.todo.controller;
 import java.io.IOException;
 import java.text.ParseException;
 import java.util.List;
-
 import javax.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +36,7 @@ import com.todo.utility.Messages;
  * @version 1.0
  * @since 18/07/18
  */
+@RefreshScope
 @RestController
 @RequestMapping("/todo/note")
 public class NoteController {
@@ -80,6 +81,40 @@ public class NoteController {
 	public ResponseEntity<?> viewAll(HttpServletRequest request) throws NoteReaderException {
 		logger.info("Read note method starts");
 		List<Note> notes = noteService.viewAllNotes(request.getHeader("userId"));
+
+		logger.info("Read note method ends");
+
+		return new ResponseEntity<List<Note>>(notes, HttpStatus.OK);
+	}
+	
+	/**
+	 * This method is to view all notes that is not archived
+	 * 
+	 * @param jwt
+	 * @return response entity
+	 * @throws NoteReaderException
+	 */
+	@RequestMapping(value = "/sort_by_name", method = RequestMethod.GET)
+	public ResponseEntity<?> sortBytitle(HttpServletRequest request) throws NoteReaderException {
+		logger.info("Read note method starts");
+		List<Note> notes = noteService.doSortByName(request.getHeader("userId"));
+
+		logger.info("Read note method ends");
+
+		return new ResponseEntity<List<Note>>(notes, HttpStatus.OK);
+	}
+	
+	/**
+	 * This method is to view all notes that is not archived
+	 * 
+	 * @param jwt
+	 * @return response entity
+	 * @throws NoteReaderException
+	 */
+	@RequestMapping(value = "/sort_by_date", method = RequestMethod.GET)
+	public ResponseEntity<?> sortByDate(HttpServletRequest request) throws NoteReaderException {
+		logger.info("Read note method starts");
+		List<Note> notes = noteService.doSortByDate(request.getHeader("userId"));
 
 		logger.info("Read note method ends");
 
@@ -289,7 +324,7 @@ public class NoteController {
 	 * @throws NoteReaderException
 	 * @throws ParseException
 	 */
-	@RequestMapping(value = "/show_label", method = RequestMethod.POST)
+	@RequestMapping(value = "/show_label", method = RequestMethod.GET)
 	public ResponseEntity<?> showLabel(HttpServletRequest request, @RequestParam String labelName)
 			throws NoteReaderException, ParseException {
 		logger.info("Label searching process start");

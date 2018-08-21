@@ -3,7 +3,14 @@
 spring:
   application:
     name: ToDoMicroserviceNoteService
-
+  cloud:
+    config:
+      uri: localhost:8888
+      profile: prod
+  profiles:
+    active:
+    - prod
+    
 # Discovery Server Access
 eureka:
     client:
@@ -13,6 +20,3 @@ eureka:
 # HTTP Server (Tomcat) Port
 server: 
   port: 8763
-
-    
-    

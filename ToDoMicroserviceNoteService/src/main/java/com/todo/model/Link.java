@@ -2,6 +2,13 @@ package com.todo.model;
 
 import java.io.Serializable;
 
+/**
+ * Purpose: pojo class of link
+ * @author JAYANTA ROY
+ * @version 1.0
+ * @since 11/08/18
+ *
+ */
 public class Link implements Serializable {
 
 
@@ -42,6 +49,4 @@ public class Link implements Serializable {
 	public String toString() {
 		return "Link [linkTitle=" + linkTitle + ", linkDomainName=" + linkDomainName + ", linkImage=" + linkImage + "]";
 	}
-	
-
 }

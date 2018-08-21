@@ -3,7 +3,6 @@ package com.todo.services;
 import java.io.IOException;
 import java.text.ParseException;
 import java.util.List;
-
 import com.todo.exception.NoteReaderException;
 import com.todo.model.Label;
 import com.todo.model.Note;
@@ -139,4 +138,17 @@ public interface IGeneralNoteService {
 	 * @throws NoteReaderException
 	 */
 	public void doDeleteNoteFromTrash(String userId, String noteId) throws NoteReaderException;
+	
+	/**
+	 * This method is designed for sorting notes by title
+	 * @param userId
+	 * @throws NoteReaderException
+	 */
+	public List<Note> doSortByName(String userID) throws NoteReaderException;
+	/**
+	 * This method is designed for sorting notes by date
+	 * @param userId
+	 * @throws NoteReaderException
+	 */
+	public List<Note> doSortByDate(String userId);
 }

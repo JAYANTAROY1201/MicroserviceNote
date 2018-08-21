@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.stream.Collectors;
+
 import org.modelmapper.ModelMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -173,28 +175,23 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	public void doUpdateNote(String userId, String noteId, String newTitle, String newDescription)
 			throws NoteReaderException, IOException {
 		logger.debug(messages.get("123"));
-		int count = 0;
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-				count++;
-				if (!newTitle.equals("")) {
-					noteOptional[i].get().setTitle(newTitle);
-				}
-				if (!newDescription.equals("")) {
-					noteOptional[i].get().setDescription(makeDescription(newDescription));
-				}
-				SimpleDateFormat formatter = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
 
-				noteOptional[i].get().setLastDateOfModified(formatter.format(new Date()));
-				logger.info(messages.get("101"));
-				noteRepositoryMongo.save(noteOptional[i].get());
-				noteRepositoryElastic.save(noteOptional[i].get());
+		Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId), messages.get("112"));
+		Optional<Note> notes = Preconditions.checkNotNull(noteRepositoryElastic.findByIdAndAuthorId(noteId, userId),
+				"No notes found");
+		if (notes.get().getTrash().equals("false")) {
+			if (!newTitle.equals("")) {
+				notes.get().setTitle(newTitle);
 			}
-		}
-		if (count == 0) {
-			logger.error(messages.get("113"));
-			throw new NoteReaderException(messages.get("113"));
+			if (!newDescription.equals("")) {
+				notes.get().setDescription(makeDescription(newDescription));
+			}
+			SimpleDateFormat formatter = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+
+			notes.get().setLastDateOfModified(formatter.format(new Date()));
+			logger.info(messages.get("101"));
+			noteRepositoryMongo.save(notes.get());
+			noteRepositoryElastic.save(notes.get());
 		}
 		logger.debug(messages.get("124"));
 	}
@@ -207,28 +204,21 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public void doDeleteNote(String userId, String noteId) throws NoteReaderException {
 		logger.debug(messages.get("125"));
-		// int count = 0;
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
-
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId)) {
-
-				if (noteOptional[i].get().getTrash().equals("true")) {
-					noteRepositoryMongo.deleteById(noteId);
-					noteRepositoryElastic.deleteById(noteId);
-					return;
-				}
-				noteRepositoryMongo.findById(noteId).get().setTrash("true");
-				noteRepositoryMongo.save(noteRepositoryMongo.findById(noteId).get());
-				labelRepositoryMongo.deleteByNoteId(noteId);
-				labelRepositoryElastic.deleteByNoteId(noteId);
-				logger.info(messages.get("126"));
-			} else {
-				logger.error(messages.get("113"));
-				throw new NoteReaderException(messages.get("113"));
-			}
-
+		Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId), messages.get("112"));
+		Optional<Note> noteOptional = Preconditions
+				.checkNotNull(noteRepositoryElastic.findByIdAndAuthorId(noteId, userId), "Note not found");
+		if (noteOptional.get().getTrash().equals("true")) {
+			noteRepositoryMongo.deleteById(noteId);
+			noteRepositoryElastic.deleteById(noteId);
+			return;
+		} else {
+			noteRepositoryMongo.findById(noteId).get().setTrash("true");
+			noteRepositoryMongo.save(noteRepositoryMongo.findById(noteId).get());
+			labelRepositoryMongo.deleteByNoteId(noteId);
+			labelRepositoryElastic.deleteByNoteId(noteId);
+			logger.info(messages.get("126"));
 		}
+
 		logger.debug(messages.get("127"));
 	}
 
@@ -241,31 +231,18 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public void doArchive(String userId, String noteId) throws NoteReaderException {
 		logger.debug(messages.get("128"));
-		int count = 0;
 
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
+		Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId), messages.get("112"));
+		Optional<Note> noteOptional = Preconditions
+				.checkNotNull(noteRepositoryElastic.findByIdAndAuthorId(noteId, userId), "Note not found");
 
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-				count++;
-			}
-		}
-		if (count == 0) {
-			logger.error(messages.get("112"));
-			throw new NoteReaderException(messages.get("112"));
+		if (noteOptional.get().getId().equals(noteId) && noteOptional.get().getTrash().equals("false")) {
+			noteOptional.get().setArchive("true");
+			noteOptional.get().setPinned("false");
+			noteRepositoryMongo.save(noteOptional.get());
+			noteRepositoryElastic.save(noteOptional.get());
 		}
 
-		else {
-			for (int i = 0; i < noteOptional.length; i++) {
-				if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-					noteOptional[i].get().setArchive("true");
-					noteOptional[i].get().setPinned("false");
-					noteRepositoryMongo.save(noteOptional[i].get());
-					noteRepositoryElastic.save(noteOptional[i].get());
-				}
-
-			}
-		}
 		logger.debug(messages.get("129"));
 	}
 
@@ -277,28 +254,14 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public void doUnarchive(String userId, String noteId) throws NoteReaderException {
 		logger.debug(messages.get("130"));
-		int count = 0;
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
+		Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId), messages.get("112"));
+		Optional<Note> noteOptional = Preconditions
+				.checkNotNull(noteRepositoryElastic.findByIdAndAuthorId(noteId, userId), "note not found");
 
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-				count++;
-			}
-		}
-		if (count == 0) {
-			logger.error(messages.get("112"));
-			throw new NoteReaderException(messages.get("112"));
-		}
-
-		else {
-			for (int i = 0; i < noteOptional.length; i++) {
-				if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-					noteOptional[i].get().setArchive("false");
-					noteRepositoryMongo.save(noteOptional[i].get());
-					noteRepositoryElastic.save(noteOptional[i].get());
-				}
-
-			}
+		if (noteOptional.get().getTrash().equals("false")) {
+			noteOptional.get().setArchive("false");
+			noteRepositoryMongo.save(noteOptional.get());
+			noteRepositoryElastic.save(noteOptional.get());
 		}
 		logger.debug(messages.get("131"));
 	}
@@ -311,32 +274,17 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public void doPinned(String userId, String noteId) throws NoteReaderException {
 		logger.debug(messages.get("132"));
-		int count = 0;
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
-
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-				count++;
+		Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId), messages.get("112"));
+		Optional<Note> noteOptional = Preconditions
+				.checkNotNull(noteRepositoryElastic.findByIdAndAuthorId(noteId, userId), "Note not found");
+		if (noteOptional.get().getTrash().equals("false")) {
+			if (noteOptional.get().getArchive().equals("true")) {
+				logger.error(messages.get("136"));
+				throw new NoteReaderException(messages.get("136"));
 			}
-		}
-		if (count == 0) {
-			logger.error(messages.get("113"));
-			throw new NoteReaderException(messages.get("113"));
-		}
-
-		else {
-			for (int i = 0; i < noteOptional.length; i++) {
-				if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-					if (noteOptional[i].get().getArchive().equals("true")) {
-						logger.error(messages.get("136"));
-						throw new NoteReaderException(messages.get("136"));
-					}
-					noteOptional[i].get().setPinned("true");
-					noteRepositoryMongo.save(noteOptional[i].get());
-					noteRepositoryElastic.save(noteOptional[i].get());
-
-				}
-			}
+			noteOptional.get().setPinned("true");
+			noteRepositoryMongo.save(noteOptional.get());
+			noteRepositoryElastic.save(noteOptional.get());
 		}
 		logger.debug(messages.get("133"));
 	}
@@ -349,27 +297,14 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public void doUnPinned(String userId, String noteId) throws NoteReaderException {
 		logger.debug(messages.get("134"));
-		int count = 0;
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
+		Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId), messages.get("112"));
+		Optional<Note> noteOptional = Preconditions
+				.checkNotNull(noteRepositoryElastic.findByIdAndAuthorId(noteId, userId), "Note not found");
 
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-				count++;
-			}
-		}
-		if (count == 0) {
-			logger.error(messages.get("113"));
-			throw new NoteReaderException(messages.get("113"));
-		}
-
-		else {
-			for (int i = 0; i < noteOptional.length; i++) {
-				if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("false")) {
-					noteOptional[i].get().setPinned("false");
-					noteRepositoryMongo.save(noteOptional[i].get());
-					noteRepositoryElastic.save(noteOptional[i].get());
-				}
-			}
+		if (noteOptional.get().getTrash().equals("false")) {
+			noteOptional.get().setPinned("false");
+			noteRepositoryMongo.save(noteOptional.get());
+			noteRepositoryElastic.save(noteOptional.get());
 		}
 		logger.debug(messages.get("135"));
 	}
@@ -419,37 +354,24 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	public void doSetLabel(String userId, String noteId, String labelName) throws NoteReaderException {
 		logger.debug("adding level process starts");
 		Preconditions.checkNotNull(labelName, messages.get("137"));
-		int count = 0;
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), "No user");
 
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId)) {
-				count++;
-			}
-		}
-		if (count == 0) {
-			logger.error(messages.get("113"));
-			throw new NoteReaderException(messages.get("113"));
-		}
+		Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), "No user");
+		Optional<Note> noteOptional = Preconditions
+				.checkNotNull(noteRepositoryMongo.findByIdAndAuthorId(noteId, userId), "Note not found");
 
-		else {
-			for (int i = 0; i < noteOptional.length; i++) {
-				if (noteOptional[i].get().getId().equals(noteId)) {
-					Label label = new Label();
-					label.setNoteId(noteId);
-					label.setUserId(userId);
-					label.setLabelName(labelName);
-					List<Label> labelList = noteOptional[i].get().getLabel();
-					labelList.add(label);
-					noteOptional[i].get().setLabel(labelList);
-					noteRepositoryMongo.save(noteOptional[i].get());
-					noteRepositoryElastic.save(noteOptional[i].get());
-					labelRepositoryMongo.save(label);
-					labelRepositoryElastic.save(label);
-					logger.info("Note labelled successfully");
-				}
-			}
-		}
+		Label label = new Label();
+		label.setNoteId(noteId);
+		label.setUserId(userId);
+		label.setLabelName(labelName);
+		List<Label> labelList = noteOptional.get().getLabel();
+		labelList.add(label);
+		noteOptional.get().setLabel(labelList);
+		noteRepositoryMongo.save(noteOptional.get());
+		noteRepositoryElastic.save(noteOptional.get());
+		labelRepositoryMongo.save(label);
+		labelRepositoryElastic.save(label);
+		logger.info("Note labelled successfully");
+
 		logger.debug("adding level process starts");
 	}
 
@@ -480,11 +402,14 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public List<Note> doSearchNoteFromLabel(String userId, String labelName) {
 		logger.debug("seaching note from level process starts");
-		Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
-		List<Label> labelList = labelRepositoryMongo.findByLabelName(labelName);
+		Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId), messages.get("112"));
+		List<Label> labelList = labelRepositoryElastic.findByLabelName(labelName);
 		List<Note> noteList = new ArrayList<>();
 		for (Label label : labelList) {
-			noteList.add(noteRepositoryMongo.findById(label.getNoteId()).get());
+			System.out.println(label.getNoteId());
+			String id = label.getNoteId();
+			System.out.println(noteRepositoryElastic.findById(id));
+			noteList.add(noteRepositoryElastic.findById(label.getNoteId()).get());
 		}
 		logger.debug("seaching note from level process ends");
 		return noteList;
@@ -499,23 +424,21 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public void doSetReminder(String userId, String noteId, String reminderTime) throws ParseException {
 		logger.debug("setting reminder process starts");
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
+		Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
+		Optional<Note> noteOptional = Preconditions
+				.checkNotNull(noteRepositoryMongo.findByIdAndAuthorId(noteId, userId), "Note not found");
 
-		for (Optional<Note> note : noteOptional) {
-			if (note.get().getId().equals(noteId)) {
+		Date reminder = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").parse(reminderTime);
+		long timeDifference = reminder.getTime() - new Date().getTime();
+		timer = new Timer();
+		timer.schedule(new TimerTask() {
 
-				Date reminder = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").parse(reminderTime);
-				long timeDifference = reminder.getTime() - new Date().getTime();
-				timer = new Timer();
-				timer.schedule(new TimerTask() {
-
-					@Override
-					public void run() {
-						logger.info("Reminder Task:" + note.toString());
-					}
-				}, timeDifference);
+			@Override
+			public void run() {
+				logger.info("Reminder Task:" + noteOptional.toString());
 			}
-		}
+		}, timeDifference);
+
 		logger.debug("setting reminder process ends");
 	}
 
@@ -529,22 +452,14 @@ public class NoteServiceImpl implements IGeneralNoteService {
 	@Override
 	public void doDeleteNoteFromTrash(String userId, String noteId) throws NoteReaderException {
 		logger.debug(messages.get("125"));
-		int count = 0;
-		Optional<Note>[] noteOptional = Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
 
-		for (int i = 0; i < noteOptional.length; i++) {
-			if (noteOptional[i].get().getId().equals(noteId) && noteOptional[i].get().getTrash().equals("true")) {
-				count++;
-			}
-		}
-		if (count > 0) {
-			noteRepositoryMongo.deleteById(noteId);
-			noteRepositoryElastic.deleteById(noteId);
-			logger.info(messages.get("126"));
-		} else {
-			logger.error(messages.get("113"));
-			throw new NoteReaderException(messages.get("113"));
-		}
+		Preconditions.checkNotNull(noteRepositoryMongo.findByAuthorId(userId), messages.get("112"));
+		Preconditions.checkNotNull(noteRepositoryMongo.findByIdAndAuthorId(noteId, userId), "Note not found");
+
+		noteRepositoryMongo.deleteById(noteId);
+		noteRepositoryElastic.deleteById(noteId);
+		logger.info(messages.get("126"));
+
 		logger.debug(messages.get("127"));
 	}
 
@@ -573,9 +488,7 @@ public class NoteServiceImpl implements IGeneralNoteService {
 					noteRepositoryElastic.save(note);
 					break;
 				}
-
 			}
-
 		}
 	}
 
@@ -607,4 +520,51 @@ public class NoteServiceImpl implements IGeneralNoteService {
 		return desc;
 	}
 
+	/**
+	 * This method is designed for sorting notes by title
+	 * 
+	 * @param userId
+	 * @throws NoteReaderException
+	 */
+	@Override
+	public List<Note> doSortByName(String userID) throws NoteReaderException {
+		logger.debug(messages.get("117"));
+		List<Note> noteList = Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userID),
+				messages.get("112"));
+		List<Note> notes = new ArrayList<>();
+		noteList.stream()
+				.filter(streamNote -> (streamNote.getPinned().equals("true"))
+						&& (streamNote.getArchive().equals("false")) && (streamNote.getTrash().equals("false")))
+				.forEach(noteFilter -> notes.add(noteFilter));
+		noteList.stream()
+				.filter(streamNote -> (streamNote.getPinned().equals("false"))
+						&& (streamNote.getArchive().equals("false")) && (streamNote.getTrash().equals("false")))
+				.forEach(noteFilter -> notes.add(noteFilter));
+
+		List<Note> sortedNote = notes.stream().sorted((a, b) -> a.getTitle().compareTo(b.getTitle()))
+				.collect(Collectors.toList());
+		logger.debug(messages.get("118"));
+		return sortedNote;
+	}
+
+	@Override
+	public List<Note> doSortByDate(String userId) {
+		logger.debug(messages.get("117"));
+		List<Note> noteList = Preconditions.checkNotNull(noteRepositoryElastic.findByAuthorId(userId),
+				messages.get("112"));
+		List<Note> notes = new ArrayList<>();
+		noteList.stream()
+				.filter(streamNote -> (streamNote.getPinned().equals("true"))
+						&& (streamNote.getArchive().equals("false")) && (streamNote.getTrash().equals("false")))
+				.forEach(noteFilter -> notes.add(noteFilter));
+		noteList.stream()
+				.filter(streamNote -> (streamNote.getPinned().equals("false"))
+						&& (streamNote.getArchive().equals("false")) && (streamNote.getTrash().equals("false")))
+				.forEach(noteFilter -> notes.add(noteFilter));
+
+		List<Note> sortedNote = notes.stream().sorted((a, b) -> a.getDateOfCreation().compareTo(b.getDateOfCreation()))
+				.collect(Collectors.toList());
+		logger.debug(messages.get("118"));
+		return sortedNote;
+	}
 }
